@@ -1,8 +1,0 @@
-libwireshark-data_4.1.0_all.deb libs optional
-libwireshark0_4.1.0_amd64.deb libs optional
-libwiretap0_4.1.0_amd64.deb libs optional
-libwsutil0_4.1.0_amd64.deb libs optional
-tshark_4.1.0_amd64.deb net optional
-wireshark-common_4.1.0_amd64.deb net optional
-wireshark-qt_4.1.0_amd64.deb net optional
-wireshark_4.1.0_amd64.buildinfo net optional
