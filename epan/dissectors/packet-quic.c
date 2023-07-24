@@ -839,20 +839,20 @@ quic_is_hp_cipher_initialized(quic_hp_cipher *hp_cipher)
 // }
 
 /* Inspired from ngtcp2 */
-static guint64 quic_pkt_adjust_pkt_num(guint64 max_pkt_num, guint64 pkt_num,
-                                   size_t n) {
-  guint64 k = max_pkt_num == G_MAXUINT64 ? max_pkt_num : max_pkt_num + 1;
-  guint64 u = k & ~((G_GUINT64_CONSTANT(1) << n) - 1);
-  guint64 a = u | pkt_num;
-  guint64 b = (u + (G_GUINT64_CONSTANT(1) << n)) | pkt_num;
-  guint64 a1 = k < a ? a - k : k - a;
-  guint64 b1 = k < b ? b - k : k - b;
+// static guint64 quic_pkt_adjust_pkt_num(guint64 max_pkt_num, guint64 pkt_num,
+//                                    size_t n) {
+//   guint64 k = max_pkt_num == G_MAXUINT64 ? max_pkt_num : max_pkt_num + 1;
+//   guint64 u = k & ~((G_GUINT64_CONSTANT(1) << n) - 1);
+//   guint64 a = u | pkt_num;
+//   guint64 b = (u + (G_GUINT64_CONSTANT(1) << n)) | pkt_num;
+//   guint64 a1 = k < a ? a - k : k - a;
+//   guint64 b1 = k < b ? b - k : k - b;
 
-  if (a1 < b1) {
-    return a;
-  }
-  return b;
-}
+//   if (a1 < b1) {
+//     return a;
+//   }
+//   return b;
+// }
 
 /**
  * Given a header protection cipher, a buffer and the packet number offset,
@@ -955,19 +955,19 @@ quic_max_packet_number(quic_info_data_t *quic_info, gboolean from_server, guint8
 /**
  * Calculate the full packet number and store it for later use.
  */
-static void
-quic_set_full_packet_number(quic_info_data_t *quic_info, quic_packet_info_t *quic_packet,
-                            gboolean from_server, guint8 first_byte, guint32 pkn32)
-{
-    guint       pkn_len = (first_byte & 3) + 1;
-    guint64     pkn_full;
-    guint64     max_pn = *quic_max_packet_number(quic_info, from_server, first_byte);
+// static void
+// quic_set_full_packet_number(quic_info_data_t *quic_info, quic_packet_info_t *quic_packet,
+//                             gboolean from_server, guint8 first_byte, guint32 pkn32)
+// {
+//     guint       pkn_len = (first_byte & 3) + 1;
+//     guint64     pkn_full;
+//     guint64     max_pn = *quic_max_packet_number(quic_info, from_server, first_byte);
 
-    /* Sequential first pass, try to reconstruct full packet number. */
-    pkn_full = quic_pkt_adjust_pkt_num(max_pn, pkn32, 8 * pkn_len);
-    quic_packet->pkn_len = pkn_len;
-    quic_packet->packet_number = pkn_full;
-}
+//     /* Sequential first pass, try to reconstruct full packet number. */
+//     pkn_full = quic_pkt_adjust_pkt_num(max_pn, pkn32, 8 * pkn_len);
+//     quic_packet->pkn_len = pkn_len;
+//     quic_packet->packet_number = pkn_full;
+// }
 
 static const char *
 cid_to_string(wmem_allocator_t *pool, const quic_cid_t *cid)
@@ -1276,8 +1276,8 @@ quic_connection_add_cid(quic_info_data_t *conn, const quic_cid_t *new_cid, gbool
 static void
 quic_connection_create_or_update(quic_info_data_t **conn_p,
                                  packet_info *pinfo, guint32 long_packet_type,
-                                 guint32 version, const quic_cid_t *scid,
-                                 const quic_cid_t *dcid, gboolean from_server)
+                                 guint32 version, quic_cid_t *scid,
+                                 quic_cid_t *dcid, gboolean from_server)
 {
     quic_info_data_t *conn = *conn_p;
 
@@ -1319,6 +1319,15 @@ quic_connection_create_or_update(quic_info_data_t **conn_p,
                 memcpy(&conn->server_cids.data, scid, sizeof(quic_cid_t));
                 quic_cids_insert(&conn->server_cids.data, conn, TRUE);
             }
+
+            wmem_map_remove(quic_client_connections, &conn->client_cids.data);
+            conn->client_cids.data = *dcid;
+            wmem_map_insert(quic_client_connections, dcid, conn);
+        }
+        if(!from_server && conn){
+            wmem_map_remove(quic_server_connections, &conn->server_cids.data);
+            conn->server_cids.data = *dcid;
+            wmem_map_insert(quic_server_connections, dcid, conn);
         }
         break;
     }
@@ -3142,17 +3151,17 @@ quic_create_0rtt_decoder(guint i, gchar *early_data_secret, guint early_data_sec
 /**
  * Tries to obtain the QUIC application traffic secrets.
  */
-static gboolean
-quic_get_traffic_secret(packet_info *pinfo, int hash_algo, quic_pp_state_t *pp_state, gboolean from_client)
-{
-    guint hash_len = gcry_md_get_algo_dlen(hash_algo);
-    char *secret = (char *)wmem_alloc0(pinfo->pool, hash_len);
-    if (!tls13_get_quic_secret(pinfo, !from_client, TLS_SECRET_APP, hash_len, hash_len, secret)) {
-        return FALSE;
-    }
-    pp_state->next_secret = (guint8 *)wmem_memdup(wmem_file_scope(), secret, hash_len);
-    return TRUE;
-}
+// static gboolean
+// quic_get_traffic_secret(packet_info *pinfo, int hash_algo, quic_pp_state_t *pp_state, gboolean from_client)
+// {
+//     guint hash_len = gcry_md_get_algo_dlen(hash_algo);
+//     char *secret = (char *)wmem_alloc0(pinfo->pool, hash_len);
+//     if (!tls13_get_quic_secret(pinfo, !from_client, TLS_SECRET_APP, hash_len, hash_len, secret)) {
+//         return FALSE;
+//     }
+//     pp_state->next_secret = (guint8 *)wmem_memdup(wmem_file_scope(), secret, hash_len);
+//     return TRUE;
+// }
 
 /**
  * Expands the secret (length MUST be the same as the "hash_algo" digest size)
@@ -3195,161 +3204,161 @@ quic_pp_cipher_init(quic_pp_cipher *pp_cipher, int hash_algo, guint8 key_length,
 /**
  * Updates the packet protection secret to the next one.
  */
-static void
-quic_update_key(guint32 version, int hash_algo, quic_pp_state_t *pp_state)
-{
-    guint hash_len = gcry_md_get_algo_dlen(hash_algo);
-    const char *label = is_quic_draft_max(version, 23) ? "traffic upd" : (is_quic_draft_max(version, 34) ? "quic ku" : "quicv2 ku");
-    gboolean ret = quic_hkdf_expand_label(hash_algo, pp_state->next_secret, hash_len,
-                                          label, pp_state->next_secret, hash_len);
-    /* This must always succeed as our hash algorithm was already validated. */
-    DISSECTOR_ASSERT(ret);
-}
+// static void
+// quic_update_key(guint32 version, int hash_algo, quic_pp_state_t *pp_state)
+// {
+//     guint hash_len = gcry_md_get_algo_dlen(hash_algo);
+//     const char *label = is_quic_draft_max(version, 23) ? "traffic upd" : (is_quic_draft_max(version, 34) ? "quic ku" : "quicv2 ku");
+//     gboolean ret = quic_hkdf_expand_label(hash_algo, pp_state->next_secret, hash_len,
+//                                           label, pp_state->next_secret, hash_len);
+//     /* This must always succeed as our hash algorithm was already validated. */
+//     DISSECTOR_ASSERT(ret);
+// }
 
 /**
  * Retrieves the header protection cipher for short header packets and prepares
  * the packet protection cipher. The application layer protocol is also queried.
  */
-static quic_hp_cipher *
-quic_get_1rtt_hp_cipher(packet_info *pinfo, quic_info_data_t *quic_info, gboolean from_server, const char **error)
-{
-    /* Keys were previously not available. */
-    if (quic_info->skip_decryption) {
-        return NULL;
-    }
+// static quic_hp_cipher *
+// quic_get_1rtt_hp_cipher(packet_info *pinfo, quic_info_data_t *quic_info, gboolean from_server, const char **error)
+// {
+//     /* Keys were previously not available. */
+//     if (quic_info->skip_decryption) {
+//         return NULL;
+//     }
 
-    quic_pp_state_t *client_pp = &quic_info->client_pp;
-    quic_pp_state_t *server_pp = &quic_info->server_pp;
-    quic_pp_state_t *pp_state = !from_server ? client_pp : server_pp;
+//     quic_pp_state_t *client_pp = &quic_info->client_pp;
+//     quic_pp_state_t *server_pp = &quic_info->server_pp;
+//     quic_pp_state_t *pp_state = !from_server ? client_pp : server_pp;
 
-    /* Try to lookup secrets if not available. */
-    if (!quic_info->client_pp.next_secret) {
-        /* Query TLS for the cipher suite. */
-        if (!tls_get_cipher_info(pinfo, 0, &quic_info->cipher_algo, &quic_info->cipher_mode, &quic_info->hash_algo)) {
-            /* We end up here if:
-                * no previous TLS handshake is found
-                * the used ciphers are unsupported
-                * some (unencrypted) padding is misdetected as SH coalesced packet
-               Because of the third scenario, we can't set quic_info->skip_decryption
-               to TRUE; otherwise we will stop decrypting the entire session, even if
-               we are able to.
-               Unfortunately, this way, we lost the optimization that allows skipping checks
-               for future packets in case the capture starts in midst of a
-               connection where the handshake is not present.
-               Note that even if we have a basic logic to detect unencrypted padding (via
-               check_dcid_on_coalesced_packet()), there is not a proper way to detect it
-               other than checking if the decryption successed
-            */
-            *error = "Missing TLS handshake, unsupported ciphers or padding";
-            return NULL;
-        }
+//     /* Try to lookup secrets if not available. */
+//     if (!quic_info->client_pp.next_secret) {
+//         /* Query TLS for the cipher suite. */
+//         if (!tls_get_cipher_info(pinfo, 0, &quic_info->cipher_algo, &quic_info->cipher_mode, &quic_info->hash_algo)) {
+//             /* We end up here if:
+//                 * no previous TLS handshake is found
+//                 * the used ciphers are unsupported
+//                 * some (unencrypted) padding is misdetected as SH coalesced packet
+//                Because of the third scenario, we can't set quic_info->skip_decryption
+//                to TRUE; otherwise we will stop decrypting the entire session, even if
+//                we are able to.
+//                Unfortunately, this way, we lost the optimization that allows skipping checks
+//                for future packets in case the capture starts in midst of a
+//                connection where the handshake is not present.
+//                Note that even if we have a basic logic to detect unencrypted padding (via
+//                check_dcid_on_coalesced_packet()), there is not a proper way to detect it
+//                other than checking if the decryption successed
+//             */
+//             *error = "Missing TLS handshake, unsupported ciphers or padding";
+//             return NULL;
+//         }
 
-        /* Retrieve secrets for both the client and server. */
-        if (!quic_get_traffic_secret(pinfo, quic_info->hash_algo, client_pp, TRUE) ||
-            !quic_get_traffic_secret(pinfo, quic_info->hash_algo, server_pp, FALSE)) {
-            quic_info->skip_decryption = TRUE;
-            *error = "Secrets are not available";
-            return NULL;
-        }
+//         /* Retrieve secrets for both the client and server. */
+//         if (!quic_get_traffic_secret(pinfo, quic_info->hash_algo, client_pp, TRUE) ||
+//             !quic_get_traffic_secret(pinfo, quic_info->hash_algo, server_pp, FALSE)) {
+//             quic_info->skip_decryption = TRUE;
+//             *error = "Secrets are not available";
+//             return NULL;
+//         }
 
-        // Create initial cipher handles for Key Phase 0 using the 1-RTT keys.
-        if (!quic_hp_cipher_prepare(&client_pp->hp_cipher, quic_info->hash_algo,
-                                    quic_info->cipher_algo, client_pp->next_secret, error, quic_info->version) ||
-            !quic_pp_cipher_prepare(&client_pp->pp_ciphers[0], quic_info->hash_algo,
-                                    quic_info->cipher_algo, quic_info->cipher_mode, client_pp->next_secret, error, quic_info->version) ||
-            !quic_hp_cipher_prepare(&server_pp->hp_cipher, quic_info->hash_algo,
-                                    quic_info->cipher_algo, server_pp->next_secret, error, quic_info->version) ||
-            !quic_pp_cipher_prepare(&server_pp->pp_ciphers[0], quic_info->hash_algo,
-                                    quic_info->cipher_algo, quic_info->cipher_mode, server_pp->next_secret, error, quic_info->version)) {
-            quic_info->skip_decryption = TRUE;
-            return NULL;
-        }
-        // Rotate the 1-RTT key for the client and server for the next key update.
-        quic_update_key(quic_info->version, quic_info->hash_algo, client_pp);
-        quic_update_key(quic_info->version, quic_info->hash_algo, server_pp);
+//         // Create initial cipher handles for Key Phase 0 using the 1-RTT keys.
+//         if (!quic_hp_cipher_prepare(&client_pp->hp_cipher, quic_info->hash_algo,
+//                                     quic_info->cipher_algo, client_pp->next_secret, error, quic_info->version) ||
+//             !quic_pp_cipher_prepare(&client_pp->pp_ciphers[0], quic_info->hash_algo,
+//                                     quic_info->cipher_algo, quic_info->cipher_mode, client_pp->next_secret, error, quic_info->version) ||
+//             !quic_hp_cipher_prepare(&server_pp->hp_cipher, quic_info->hash_algo,
+//                                     quic_info->cipher_algo, server_pp->next_secret, error, quic_info->version) ||
+//             !quic_pp_cipher_prepare(&server_pp->pp_ciphers[0], quic_info->hash_algo,
+//                                     quic_info->cipher_algo, quic_info->cipher_mode, server_pp->next_secret, error, quic_info->version)) {
+//             quic_info->skip_decryption = TRUE;
+//             return NULL;
+//         }
+//         // Rotate the 1-RTT key for the client and server for the next key update.
+//         quic_update_key(quic_info->version, quic_info->hash_algo, client_pp);
+//         quic_update_key(quic_info->version, quic_info->hash_algo, server_pp);
 
-        // For efficiency, look up the application layer protocol once. The
-        // handshake must have been completed before, so ALPN is known.
-        const char *proto_name = tls_get_alpn(pinfo);
-        if (proto_name) {
-            quic_info->app_handle = dissector_get_string_handle(quic_proto_dissector_table, proto_name);
-            // If no specific handle is found, alias "h3-*" to "h3" and "doq-*" to "doq"
-            if (!quic_info->app_handle) {
-                if (g_str_has_prefix(proto_name, "h3-")) {
-                    quic_info->app_handle = dissector_get_string_handle(quic_proto_dissector_table, "h3");
-                } else if (g_str_has_prefix(proto_name, "doq-")) {
-                    quic_info->app_handle = dissector_get_string_handle(quic_proto_dissector_table, "doq");
-                }
-            }
-        }
-    }
+//         // For efficiency, look up the application layer protocol once. The
+//         // handshake must have been completed before, so ALPN is known.
+//         const char *proto_name = tls_get_alpn(pinfo);
+//         if (proto_name) {
+//             quic_info->app_handle = dissector_get_string_handle(quic_proto_dissector_table, proto_name);
+//             // If no specific handle is found, alias "h3-*" to "h3" and "doq-*" to "doq"
+//             if (!quic_info->app_handle) {
+//                 if (g_str_has_prefix(proto_name, "h3-")) {
+//                     quic_info->app_handle = dissector_get_string_handle(quic_proto_dissector_table, "h3");
+//                 } else if (g_str_has_prefix(proto_name, "doq-")) {
+//                     quic_info->app_handle = dissector_get_string_handle(quic_proto_dissector_table, "doq");
+//                 }
+//             }
+//         }
+//     }
 
-    // Note: Header Protect cipher does not change after Key Update.
-    return &pp_state->hp_cipher;
-}
+//     // Note: Header Protect cipher does not change after Key Update.
+//     return &pp_state->hp_cipher;
+// }
 
 /**
  * Tries to construct the appropriate cipher for the current key phase.
  * See also "PROTECTED PAYLOAD DECRYPTION" comment on top of this file.
  */
-static quic_pp_cipher *
-quic_get_pp_cipher(gboolean key_phase, quic_info_data_t *quic_info, gboolean from_server)
-{
-    const char *error = NULL;
-    gboolean    success = FALSE;
+// static quic_pp_cipher *
+// quic_get_pp_cipher(gboolean key_phase, quic_info_data_t *quic_info, gboolean from_server)
+// {
+//     const char *error = NULL;
+//     gboolean    success = FALSE;
 
-    /* Keys were previously not available. */
-    if (quic_info->skip_decryption) {
-        return NULL;
-    }
+//     /* Keys were previously not available. */
+//     if (quic_info->skip_decryption) {
+//         return NULL;
+//     }
 
-    quic_pp_state_t *client_pp = &quic_info->client_pp;
-    quic_pp_state_t *server_pp = &quic_info->server_pp;
-    quic_pp_state_t *pp_state = !from_server ? client_pp : server_pp;
+//     quic_pp_state_t *client_pp = &quic_info->client_pp;
+//     quic_pp_state_t *server_pp = &quic_info->server_pp;
+//     quic_pp_state_t *pp_state = !from_server ? client_pp : server_pp;
 
-    /*
-     * If the key phase changed, try to decrypt the packet using the new cipher.
-     * If that fails, then it is either a malicious packet or out-of-order.
-     * In that case, try the previous cipher (unless it is the very first KP1).
-     * '!!' is due to key_phase being a signed bitfield, it forces -1 into 1.
-     */
-    if (key_phase != !!pp_state->key_phase) {
-        quic_pp_cipher new_cipher;
+//     /*
+//      * If the key phase changed, try to decrypt the packet using the new cipher.
+//      * If that fails, then it is either a malicious packet or out-of-order.
+//      * In that case, try the previous cipher (unless it is the very first KP1).
+//      * '!!' is due to key_phase being a signed bitfield, it forces -1 into 1.
+//      */
+//     if (key_phase != !!pp_state->key_phase) {
+//         quic_pp_cipher new_cipher;
 
-        memset(&new_cipher, 0, sizeof(new_cipher));
-        if (!quic_pp_cipher_prepare(&new_cipher, quic_info->hash_algo,
-                                    quic_info->cipher_algo, quic_info->cipher_mode, pp_state->next_secret, &error, quic_info->version)) {
-            /* This should never be reached, if the parameters were wrong
-             * before, then it should have set "skip_decryption". */
-            REPORT_DISSECTOR_BUG("quic_pp_cipher_prepare unexpectedly failed: %s", error);
-            return NULL;
-        }
+//         memset(&new_cipher, 0, sizeof(new_cipher));
+//         if (!quic_pp_cipher_prepare(&new_cipher, quic_info->hash_algo,
+//                                     quic_info->cipher_algo, quic_info->cipher_mode, pp_state->next_secret, &error, quic_info->version)) {
+//             /* This should never be reached, if the parameters were wrong
+//              * before, then it should have set "skip_decryption". */
+//             REPORT_DISSECTOR_BUG("quic_pp_cipher_prepare unexpectedly failed: %s", error);
+//             return NULL;
+//         }
 
-        // TODO verify decryption before switching keys.
-        success = TRUE;
+//         // TODO verify decryption before switching keys.
+//         success = TRUE;
 
-        if (success) {
-            /* Verified the cipher, use it from now on and rotate the key. */
-            /* Note that HP cipher is not touched.
-               https://tools.ietf.org/html/draft-ietf-quic-tls-32#section-5.4
-	       "The same header protection key is used for the duration of the
-	        connection, with the value not changing after a key update" */
-            quic_pp_cipher_reset(&pp_state->pp_ciphers[key_phase]);
-            pp_state->pp_ciphers[key_phase] = new_cipher;
-            quic_update_key(quic_info->version, quic_info->hash_algo, pp_state);
+//         if (success) {
+//             /* Verified the cipher, use it from now on and rotate the key. */
+//             /* Note that HP cipher is not touched.
+//                https://tools.ietf.org/html/draft-ietf-quic-tls-32#section-5.4
+// 	       "The same header protection key is used for the duration of the
+// 	        connection, with the value not changing after a key update" */
+//             quic_pp_cipher_reset(&pp_state->pp_ciphers[key_phase]);
+//             pp_state->pp_ciphers[key_phase] = new_cipher;
+//             quic_update_key(quic_info->version, quic_info->hash_algo, pp_state);
 
-            pp_state->key_phase = key_phase;
-            //pp_state->changed_in_pkn = pkn;
+//             pp_state->key_phase = key_phase;
+//             //pp_state->changed_in_pkn = pkn;
 
-            return &pp_state->pp_ciphers[key_phase];
-        } else {
-            // TODO fallback to previous cipher
-            return NULL;
-        }
-    }
+//             return &pp_state->pp_ciphers[key_phase];
+//         } else {
+//             // TODO fallback to previous cipher
+//             return NULL;
+//         }
+//     }
 
-    return &pp_state->pp_ciphers[key_phase];
-}
+//     return &pp_state->pp_ciphers[key_phase];
+// }
 
 /**
  * Process (protected) payload, adding the encrypted payload to the tree. If
@@ -3362,7 +3371,7 @@ quic_get_pp_cipher(gboolean key_phase, quic_info_data_t *quic_info, gboolean fro
 static void
 quic_process_payload(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_item *ti, guint offset,
                      quic_info_data_t *quic_info, quic_packet_info_t *quic_packet, gboolean from_server,
-                     quic_pp_cipher *pp_cipher, guint8 first_byte, guint pkn_len)
+                     guint8 first_byte, guint pkn_len)
 {
     quic_decrypt_result_t *decryption = &quic_packet->decryption;
     quic_info->skip_decryption = FALSE;
@@ -3378,11 +3387,9 @@ quic_process_payload(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_
 
         quic_decrypt_message(tvb, offset, first_byte, pkn_len, &quic_packet->decryption); // mycode
     }
-    if(pp_cipher == NULL){
-        expert_add_info_format(pinfo, tree, &ei_quic_coalesced_padding_data, "PP CIPHER NULL");
-    }
-
-    expert_add_info_format(pinfo, tree, &ei_quic_coalesced_padding_data, "Dec Data len: %d", decryption->data_len);
+    // if(pp_cipher == NULL){
+    //     expert_add_info_format(pinfo, tree, &ei_quic_coalesced_padding_data, "PP CIPHER NULL");
+    // }
 
     if (decryption->error) {
         expert_add_info_format(pinfo, ti, &ei_quic_decryption_failed,
@@ -3835,14 +3842,17 @@ dissect_quic_long_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tre
                 }
             }
             if (!error) {
-                if(long_packet_type == QUIC_LPT_INITIAL){ // mycode
-                    quic_packet->packet_number = *quic_max_packet_number(conn, from_server, first_byte);
-                    quic_packet->pkn_len = 1;
-                    quic_packet->packet_number = 0;
-                }
-                else
-                    quic_set_full_packet_number(conn, quic_packet, from_server, first_byte, pkn32);
+                // if(long_packet_type == QUIC_LPT_INITIAL){ // mycode
+                //     quic_packet->packet_number = *quic_max_packet_number(conn, from_server, first_byte);
+                //     quic_packet->pkn_len = 1;
+                //     quic_packet->packet_number = 0;
+                // }
+                // else
+                //     quic_set_full_packet_number(conn, quic_packet, from_server, first_byte, pkn32);
                 
+                quic_packet->pkn_len = 1;
+                quic_packet->packet_number = tvb_get_guint8(tvb, pn_offset);
+
                 quic_packet->first_byte = first_byte;
             }
         }
@@ -3906,7 +3916,7 @@ dissect_quic_long_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tre
 
     if (conn) {
         quic_process_payload(tvb, pinfo, quic_tree, ti, offset,
-                             conn, quic_packet, from_server, &ciphers->pp_cipher, first_byte, quic_packet->pkn_len);
+                             conn, quic_packet, from_server, first_byte, quic_packet->pkn_len);
     }
     if (!PINFO_FD_VISITED(pinfo) && !quic_packet->decryption.error) {
         // Packet number is verified to be valid, remember it.
@@ -3937,7 +3947,6 @@ dissect_quic_short_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tr
     guint8  first_byte = 0;
     gboolean    key_phase = FALSE;
     proto_item *ti;
-    quic_pp_cipher *pp_cipher = NULL;
     quic_info_data_t *conn = dgram_info->conn;
     const gboolean from_server = dgram_info->from_server;
     gboolean loss_bits_negotiated = FALSE;
@@ -3954,16 +3963,18 @@ dissect_quic_short_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tr
        loss_bits_negotiated = quic_loss_bits_negotiated(conn, from_server);
     }
     if (!PINFO_FD_VISITED(pinfo) && conn) {
-        const gchar *error = NULL;
-        guint32 pkn32 = 0;
-        quic_hp_cipher *hp_cipher = quic_get_1rtt_hp_cipher(pinfo, conn, from_server, &error);
-        if (quic_is_hp_cipher_initialized(hp_cipher) && quic_decrypt_header(tvb, 1 + dcid.len, hp_cipher, conn->cipher_algo, &first_byte, &pkn32, loss_bits_negotiated)) {
-            quic_set_full_packet_number(conn, quic_packet, from_server, first_byte, pkn32);
-            quic_packet->first_byte = first_byte;
-        }
-        if (error) {
-            quic_packet->decryption.error = wmem_strdup(wmem_file_scope(), error);
-        }
+        // const gchar *error = NULL;
+        // guint32 pkn32 = 0;
+        // quic_hp_cipher *hp_cipher = quic_get_1rtt_hp_cipher(pinfo, conn, from_server, &error);
+        // if (quic_is_hp_cipher_initialized(hp_cipher) && quic_decrypt_header(tvb, 1 + dcid.len, hp_cipher, conn->cipher_algo, &first_byte, &pkn32, loss_bits_negotiated)) {
+        //     quic_set_full_packet_number(conn, quic_packet, from_server, first_byte, pkn32);
+        //     quic_packet->first_byte = first_byte;
+        // }
+        // if (error) {
+        //     quic_packet->decryption.error = wmem_strdup(wmem_file_scope(), error);
+        // }
+        quic_packet->pkn_len = 1;
+        quic_packet->packet_number = tvb_get_guint8(tvb, 1 + dcid.len);
     } else if (conn && quic_packet->pkn_len) {
         first_byte = quic_packet->first_byte;
     }
@@ -4001,9 +4012,9 @@ dissect_quic_short_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tr
         proto_item_append_text(pi, " DCID=%s", dcid_str);
     }
 
-    if (!PINFO_FD_VISITED(pinfo) && conn) {
-        pp_cipher = quic_get_pp_cipher(key_phase, conn, from_server);
-    }
+    // if (!PINFO_FD_VISITED(pinfo) && conn) {
+    //     pp_cipher = quic_get_pp_cipher(key_phase, conn, from_server);
+    // }
 
     if (quic_packet->decryption.error) {
         expert_add_info_format(pinfo, quic_tree, &ei_quic_decryption_failed,
@@ -4026,7 +4037,7 @@ dissect_quic_short_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tr
 
     if (conn) {
         quic_process_payload(tvb, pinfo, quic_tree, ti, offset,
-                             conn, quic_packet, from_server, pp_cipher, first_byte, quic_packet->pkn_len);
+                             conn, quic_packet, from_server, first_byte, quic_packet->pkn_len);
         if (!PINFO_FD_VISITED(pinfo) && !quic_packet->decryption.error) {
             // Packet number is verified to be valid, remember it.
             *quic_max_packet_number(conn, from_server, first_byte) = quic_packet->packet_number;
